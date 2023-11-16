@@ -190,9 +190,9 @@ vector<vector<int>> generar_vecindario(vector<int> solucion) {
  *      - solucion: vector con los indices de la ruta
  *      - nodos:    vector de puntos (x, y)
  *      - demanda:  vector de demandas
- *      - max_risk: float 
+ *      - max_risk: float
  * Output:
- *      - mejor_solucion:   vector con los indices de la mejor ruta 
+ *     - mejor_solucion:   vector con los indices de la mejor ruta
  * ***/
 vector<int> HCAM(vector<int> solucion, vector<Punto> nodos, vector<int> demanda, float max_risk) {
     vector<int> mejor_solucion = solucion;
