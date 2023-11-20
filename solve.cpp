@@ -5,6 +5,9 @@
 #include <string.h>
 #include <dirent.h>
 #include <string>
+#include <ctime>
+#include <algorithm>
+#include <chrono>
 
 using namespace std;
 
@@ -78,12 +81,9 @@ int mas_cercano_con_riesgo(Punto origen, vector<Punto> nodos, vector<bool>& visi
             }
             else if (d >= max_risk) {
                 return 0;
-            }
-            
+            }   
         }
-        //cout << "nodo: " << i << " distancia: " << d << endl;
-    }
-    
+    }  
     return mas_cercano;
 }
 
@@ -105,6 +105,7 @@ vector<int> greedy_with_risk(Punto origen, vector<Punto> nodos, vector<bool>& vi
     visitados[0] = true;
 
     int indice = mas_cercano_con_riesgo(origen, nodos, visitados, max_risk, carga);
+    carga = carga + demanda[indice];
 
     origen = nodos[indice];
     for (int i = 1; i < visitados.size(); i++) {
@@ -117,7 +118,7 @@ vector<int> greedy_with_risk(Punto origen, vector<Punto> nodos, vector<bool>& vi
 
         ruta.push_back(indice);
         visitados[indice] = true;
-        carga += demanda[indice];
+        carga = carga + demanda[indice];
         origen = nodos[indice];
     }
 
@@ -153,33 +154,6 @@ bool verify_factibility(vector<int> solucion) {
         return false;
     }
     return true;
-}
-
-/***
- * Genera el vecindario mediante un movimiento swap, vecindario será utilizado en HCAM
- * Input:
- *      - solucion: vector con los indices de la ruta
- * Output:
- *      - vecindario: vector de vectores con los indices de las nuevas rutas
- * ***/
-vector<vector<int>> generar_vecindario(vector<int> solucion) {
-    vector<vector<int>> vecindario;
-
-    if (solucion.size() <= 3) {
-        vecindario.push_back(solucion);
-    }
-
-    for (int i = 1; i < solucion.size() - 2; i++) {
-        if (verify_factibility(swap(solucion, i, i + 1))) {
-            vecindario.push_back(swap(solucion, i, i + 1));
-        }
-    }
-
-    if (verify_factibility(swap(solucion, solucion.size() - 2, 1))) {
-        vecindario.push_back(swap(solucion, solucion.size() - 2, 1));
-    }
-
-    return vecindario;
 }
 
 /***
@@ -229,20 +203,58 @@ vector<int> HCAM(vector<int> solucion, vector<Punto> nodos, vector<int> demanda,
     return mejor_solucion;
 }
 
+/***
+ * Algoritmo de Restart, recibe una solucion y la modifica intercambiando dos nodos
+ * Se utiliza para diversificar la solucion y explorar el espacio de busqueda, 
+ * puede buscar valores en lo infactible
+ * Input:
+ *      - solucion_inicial: vector con los indices de la ruta
+ * Output:
+ *      - solucion_inicial: vector con los indices de la ruta cambiados
+ * ***/
+void Restart(vector<vector<int>>& solucion_inicial) {
+    
+    int cant_rutas = solucion_inicial.size();
+    vector<int> cant_nodos;
+
+    for (int i = 0; i < cant_rutas; i++) {
+        cant_nodos.push_back(solucion_inicial[i].size());
+    }
+
+    int ruta1 = rand() % cant_rutas;
+    int nodo1 = rand() % cant_nodos.size();
+    int ruta2 = rand() % cant_rutas;
+    int nodo2 = rand() % cant_nodos.size();
+
+    while (solucion_inicial[ruta1][nodo1] == 0 || solucion_inicial[ruta2][nodo2] == 0) {
+        ruta1 = rand() % cant_rutas;
+        nodo1 = rand() % cant_nodos.size();
+        ruta2 = rand() % cant_rutas;
+        nodo2 = rand() % cant_nodos.size();
+    }
+
+    int temp = solucion_inicial[ruta1][nodo1];
+    solucion_inicial[ruta1][nodo1] = solucion_inicial[ruta2][nodo2];
+    solucion_inicial[ruta2][nodo2] = temp;
+}
+
 int main() {
     int n;
-    float riesgo = 0;
     int cantidad_vehiculos = 0;
     float max_risk;
     vector<int> demanda;
     Punto deposit;
     vector<Punto> coordenadas;
 
+    srand(time(NULL));
+
+    // Comienza a leer el archivo
     DIR *dir;
     struct dirent *ent;
     string folder_path = "Instancias-RCVRP";
     string subfolder_path;
     string file_path;
+    string file_name;
     int subfolder_choice;
     int file_choice;
     int i = 1;
@@ -264,7 +276,7 @@ int main() {
         return EXIT_FAILURE;
     }
 
-    cout << "Enter the number of the subfolder you want to enter: ";
+    cout << "Ingresa el numero del Set que deseas revisar: ";
     cin >> subfolder_choice;
 
     if ((dir = opendir(folder_path.c_str())) != NULL) {
@@ -297,10 +309,11 @@ int main() {
         }
         closedir(dir);
 
-        cout << "Enter the number of the file you want to read: ";
+        cout << "Ingresa el numero de la instancia: ";
         cin >> file_choice;
 
         file_path = subfolder_path + "/" + file_names[file_choice - 1];
+        file_name = file_names[file_choice - 1];
 
         ifstream file(file_path.c_str());
         if (file.is_open()) {
@@ -340,9 +353,10 @@ int main() {
     cout << "=====================================" << endl;
     cout << endl;
 
+    auto start = chrono::high_resolution_clock::now();
     vector<bool> visitados(coordenadas.size(), false);
 
-    vector<vector<int>> soluciones, solucion_parcial, vecindario;
+    vector<vector<int>> soluciones, solucion_parcial, solucion_final;
     soluciones.reserve(n);
     
     // partir desde el origen
@@ -383,23 +397,6 @@ int main() {
     cout << "=====================================" << endl;
     cout << endl;
 
-    cout << "Vecindario a generar: " << endl;
-    for (int i = 0; i < soluciones.size(); i++) {
-        vecindario = generar_vecindario(soluciones[i]);
-        cout << "Vecindario de la solucion " << i + 1 << ": " << endl;
-        for (int j = 0; j < vecindario.size(); j++) {
-            cout << "Vecino " << j + 1 << ": ";
-            for (int k = 0; k < vecindario[j].size() - 1; k++) {
-                cout << vecindario[j][k] << " -> ";
-            }
-            cout << "0" << endl;
-        }
-    }
-
-    cout << endl;
-    cout << "=====================================" << endl;
-    cout << endl;
-
     cantidad_vehiculos = 0;
     solucion_parcial.push_back(HCAM(soluciones[0], coordenadas, demanda, max_risk));
     cantidad_vehiculos++;
@@ -411,6 +408,41 @@ int main() {
     }
 
     cout << "La solucion obtenida por HCAM es: " << endl;
+
+    for (int i = 0; i < solucion_parcial.size(); i++) {
+        cout << "Vehiculo " << i + 1 << ": ";
+
+        for (int j = 0; j < solucion_parcial[i].size() - 1; j++) {
+            cout << solucion_parcial[i][j] << " -> ";
+        }
+        cout << "0" << endl;
+    }
+
+    cout << endl;
+
+    calidad = 0;
+
+    for (int i = 0; i < solucion_parcial.size(); i++) {
+        calidad += funcion_objetivo(solucion_parcial[i], coordenadas);
+    }
+
+    cout << "La calidad de la solucion es: " << calidad << endl;
+    cout << "La cantidad de vehiculos es: " << cantidad_vehiculos << endl;
+    cout << endl;
+
+    // Fase de diversificacion mediante el Restart y reverse
+    for (int i = 0; i < solucion_parcial.size(); i++) {
+        Restart(solucion_parcial);
+    }
+
+    for (int i = 0; i < solucion_parcial.size(); i++) {
+        reverse(solucion_parcial[i].begin(), solucion_parcial[i].end());
+    } 
+    
+    cout << "=====================================" << endl;
+    cout << endl;
+    
+    cout << "La solucion obtenida por Restart es: " << endl;
     for (int i = 0; i < solucion_parcial.size(); i++) {
         cout << "Vehiculo " << i + 1 << ": ";
 
@@ -433,13 +465,91 @@ int main() {
     cout << endl;
 
     cout << "=====================================" << endl;
+    cout << endl;
+
+    for (int i = 0; i < solucion_parcial.size(); i++) {
+        solucion_final.push_back(HCAM(solucion_parcial[i], coordenadas, demanda, max_risk));
+    }
+
+    cout << "La solucion final es: " << endl;
+    for (int i = 0; i < solucion_final.size(); i++) {
+        cout << "Vehiculo " << i + 1 << ": ";
+
+        for (int j = 0; j < solucion_final[i].size() - 1; j++) {
+            cout << solucion_final[i][j] << " -> ";
+        }
+        cout << "0" << endl;
+    }
+
+    cout << endl;
+
+    calidad = 0;
+
+    for (int i = 0; i < solucion_final.size(); i++) {
+        calidad += funcion_objetivo(solucion_final[i], coordenadas);
+    }
+
+    auto stop = chrono::high_resolution_clock::now();
+    auto duration = chrono::duration_cast<chrono::seconds>(stop - start);
+
+    cout << "La calidad de la solucion es: " << calidad << endl;
+    cout << "La cantidad de vehiculos es: " << cantidad_vehiculos << endl;
+    cout << endl;
+
+    cout << "=====================================" << endl;
     cout << "=====================================" << endl;
     cout << "==== Has llegado al final del =) ====" << endl;
     cout << "====          programa.          ====" << endl;
     cout << "=====================================" << endl;
 
+    file_name.replace(file_name.find("txt"), 3, "out");
+    
+    ofstream salida(file_name);
 
+    if (salida.is_open()) {
+        salida << duration.count() << endl;
+        salida << calidad << endl;
+        salida << cantidad_vehiculos << endl;
 
+        for (int i = 1; i < visitados.size(); i++) {
+            if (visitados[i]) {
+                salida << i << " ";
+            }
+        }
+        salida << endl; 
+
+        vector<float> riesgo;
+        riesgo.reserve(solucion_final.size());
+
+        for (int i = 0; i < solucion_final.size(); i++) {
+            riesgo.push_back(0);
+            for (int j = 0; j < solucion_final[i].size() - 1; j++) {
+                riesgo[i] += calculate_risk(coordenadas[solucion_final[i][j]], coordenadas[solucion_final[i][j + 1]], demanda[solucion_final[i][j]]);
+            }
+        }
+
+        vector<float> carga_vehiculo;
+        carga_vehiculo.reserve(solucion_final.size());
+
+        for (int i = 0; i < solucion_final.size(); i++) {
+            carga_vehiculo.push_back(0);
+            for (int j = 0; j < solucion_final[i].size() - 1; j++) {
+                carga_vehiculo[i] += demanda[solucion_final[i][j]];
+            }
+        }
+
+        for (int i = 0; i < solucion_final.size(); i++) {
+            salida << carga_vehiculo[i] << " ";
+            salida << riesgo[i] << " ";
+            for (int j = 0; j < solucion_final[i].size() - 1; j++) {
+                salida << solucion_final[i][j] << "->";
+            }
+            salida << "0" << endl;
+        }
+        salida.close();
+    } else {
+        cout << "Could not open file." << endl;
+    }    
+    
     return 0;
 }
-
